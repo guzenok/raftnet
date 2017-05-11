@@ -31,9 +31,14 @@ func main() {
 	//
 	for {
 		for addr, node := range nodes {
-			log.Printf("%s: %v\n", addr, node.State())
+			state := node.State()
+			log.Printf("%s: %v\n", addr, state)
+			if state == raft.Follower || state == raft.Leader {
+				af := node.Apply([]byte("from "+state.String()), time.Second)
+				log.Printf("%s APPLY: %+v\n", addr, af)
+			}
+			time.Sleep(3 * time.Second)
 		}
-		time.Sleep(3 * time.Second)
 	}
 	log.Println("Finish")
 }
