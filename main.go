@@ -2,9 +2,9 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"time"
 
 	"github.com/hashicorp/raft"
@@ -13,8 +13,12 @@ import (
 func main() {
 	nodes := make(map[string]*raft.Raft, 5)
 	peers := []string{}
+	// конфиг
+	conf := raft.DefaultConfig()
+	conf.Logger = log.New(os.Stderr, "raft", log.Flags())
+	// создаем ноды
 	for i := 0; i < 5; i++ {
-		addr, node, err := makeNode()
+		addr, node, err := makeNode(conf)
 		if err != nil {
 			panic(err)
 		}
@@ -27,25 +31,27 @@ func main() {
 	//
 	for {
 		for addr, node := range nodes {
-			fmt.Printf("%s: %v\n", addr, node.State())
+			log.Printf("%s: %v\n", addr, node.State())
 		}
 		time.Sleep(3 * time.Second)
 	}
 	log.Println("Finish")
 }
 
-func makeNode() (addr string, node *raft.Raft, err error) {
+func makeNode(conf *raft.Config) (addr string, node *raft.Raft, err error) {
 	// директория
 	dir, err := ioutil.TempDir("", "raft")
 	if err != nil {
 		return addr, node, err
 	}
-	// конфиг
-	conf := raft.DefaultConfig()
 	// log store
 	fsm := &MockFSM{}
 	// transport
-	addr, trans := raft.NewInmemTransport("")
+	trans, err := raft.NewTCPTransport("127.0.0.1:0", nil, 2, time.Second, nil)
+	if err != nil {
+		return addr, node, err
+	}
+	addr = trans.LocalAddr()
 	//
 	store := raft.NewInmemStore()
 	//
@@ -55,7 +61,7 @@ func makeNode() (addr string, node *raft.Raft, err error) {
 	}
 	//
 	peers := raft.NewJSONPeers(dir, trans)
-	fmt.Printf("Created %s: %d\n", addr, dir)
+	log.Printf("Created %s: %d\n", addr, dir)
 
 	node, err = raft.NewRaft(conf, fsm, store, store, snap, peers, trans)
 	if err != nil {
